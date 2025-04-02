@@ -34,6 +34,15 @@
     #visualization {
       height: 400px;
     }
+    /* Console styling for log persistence */
+    #console {
+      max-height: 200px;
+      overflow-y: auto;
+      background: #1f1f23;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 8px;
+    }
   </style>
 </head>
 <body class="p-6">
@@ -74,7 +83,7 @@
       <h2 class="text-xl font-semibold mb-2">📊 Live Visualization</h2>
       <div id="visualization" class="border border-zinc-700 rounded-md bg-zinc-900 p-2 relative"></div>
 
-      <!-- Whisper-Style Console -->
+      <!-- Professional Console with Timestamps -->
       <div id="console" class="mt-4 text-sm text-zinc-400 font-mono"></div>
 
       <!-- Export Buttons -->
@@ -159,6 +168,16 @@
     }
   };
 
+  // Append a log message with timestamp to the console
+  function appendLog(message) {
+    const consoleEl = document.getElementById('console');
+    const logEntry = document.createElement('div');
+    logEntry.innerHTML = message;
+    consoleEl.appendChild(logEntry);
+    // Auto-scroll to the bottom
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+
   // Configure Monaco Editor
   require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs' } });
   require(['vs/editor/editor.main'], () => {
@@ -182,10 +201,9 @@
   function renderVisualization() {
     const code = editor.getValue();
     const viz = document.getElementById('visualization');
-    const consoleEl = document.getElementById('console');
     const startTime = performance.now();
 
-    // Clear previous visualization and logs
+    // Clear previous visualization (but keep the log until a new generation)
     viz.innerHTML = "";
     d3.select("#visualization").select("svg").remove();
 
@@ -203,27 +221,25 @@
       else if (codeLower.includes("scatter")) chartType = "Scatter";
 
       const timeTaken = (endTime - startTime).toFixed(2);
-      let message = `✅ Rendered successfully in <strong>${timeTaken}ms</strong> — Detected chart: <strong>${chartType}</strong>`;
+      const timestamp = new Date().toLocaleTimeString();
+      let message = `[${timestamp}] ✅ Rendered successfully in <strong>${timeTaken}ms</strong> — Detected chart: <strong>${chartType}</strong>`;
+      appendLog(message);
 
-      // Display render info in console area
-      consoleEl.innerHTML = message;
-
-      // Attach live inspector to all SVG elements
+      // Attach live inspector to all SVG elements to log mouseover events
       d3.select("#visualization svg")
         .selectAll("*")
         .on("mouseover", function(event, d) {
           const tag = this.tagName;
           const dataVal = d && typeof d === "object" ? JSON.stringify(d) : d;
-          const info = `🕵️ Hovering: <strong>${tag}</strong>${dataVal ? ` — Data: ${dataVal}` : ""}`;
-          consoleEl.innerHTML = info;
-        })
-        .on("mouseout", () => {
-          consoleEl.innerHTML = message;
+          const hoverTimestamp = new Date().toLocaleTimeString();
+          const info = `[${hoverTimestamp}] 🕵️ Hovering: <strong>${tag}</strong>${dataVal ? ` — Data: ${dataVal}` : ""}`;
+          appendLog(info);
         });
-
     } catch (err) {
+      const errorTimestamp = new Date().toLocaleTimeString();
+      const errorMsg = `[${errorTimestamp}] <span class="text-red-400">❌ Error: ${err.message}</span>`;
+      appendLog(errorMsg);
       console.error("Rendering error:", err);
-      consoleEl.innerHTML = `<span class="text-red-400">❌ Error: ${err.message}</span>`;
     }
   }
 
@@ -257,13 +273,16 @@
 
   // Prompt generation handler
   document.getElementById('generateButton').addEventListener('click', async () => {
+    // Clear log for a fresh session
+    document.getElementById('console').innerHTML = "";
+
     const prompt = document.getElementById('promptInput').value.trim();
     if (!prompt) return alert("Enter a prompt.");
 
     // Save prompt to history
     savePrompt(prompt);
 
-    // Clear previous visualization and set loading message
+    // Clear previous visualization and display a generating message
     d3.select("#visualization").select("svg").remove();
     document.getElementById('visualization').innerHTML = "";
     editor.setValue("// Generating code...");
@@ -312,10 +331,7 @@ Your generated code must follow these principles:
 5. ✨ User Experience
    - Incorporate tooltips or basic interactivity where it enhances clarity (e.g., on hover).
    - Keep transitions smooth and minimal when included.
-
-IMPORTANT: This model (deepseek-r1-distill-llama-70b) generates its chain-of-thought before the final response, enclosed in <think> tags. INCLUDE that chain-of-thought in your response so the user can see your reasoning, followed by the final JavaScript code output.
-
-Your mission is to generate stunning, effective, and uniform D3.js visualizations every single time. Deliver nothing less than top-tier, copy-paste-ready JavaScript.`
+`
             },
             { role: "user", content: prompt }
           ]
@@ -326,30 +342,13 @@ Your mission is to generate stunning, effective, and uniform D3.js visualization
       console.log("API response:", data);
       let output = data.choices[0].message.content;
 
-      // Extract chain-of-thought if present
-      let chainOfThought = "";
-      if (output.includes("<think>")) {
-        const thinkMatch = output.match(/<think>([\s\S]*?)<\/think>/i);
-        if (thinkMatch) {
-          chainOfThought = thinkMatch[1].trim();
-        }
-        // Remove chain-of-thought from output
-        output = output.replace(/<think>[\s\S]*?<\/think>/i, "").trim();
-      }
-
       // Extract code from Markdown formatting if present
       const codeMatch = output.match(/```javascript\s*([\s\S]*?)```/i);
       const extractedCode = codeMatch ? codeMatch[1].trim() : output.trim();
 
-      // Set the generated code in the Monaco Editor
+      // Set the generated code in the Monaco Editor and render
       editor.setValue(extractedCode);
       renderVisualization();
-
-      // Append chain-of-thought to the console (if available)
-      if (chainOfThought) {
-        const consoleEl = document.getElementById('console');
-        consoleEl.innerHTML += `<br/><span class="text-blue-400">Chain-of-Thought: ${chainOfThought}</span>`;
-      }
 
     } catch (error) {
       console.error("Error fetching code:", error);
