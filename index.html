@@ -73,11 +73,32 @@
   // Example prompts data
   const examplePrompts = [
     "Create a bar chart showing website traffic for different browsers.",
-    "Generate a pie chart of expenses: Rent 40%, Food 30%, etc.",
-    "Create a line chart of temperature over 7 days.",
+    "Generate a pie chart of expenses: Rent 40%, Food 30%, Utilities 20%, Other 10%.",
+    "Create a line chart of temperature over the past 7 days.",
     "Create a scatter plot of study hours vs exam scores.",
-    "Draw a red circle in the center of the visualization area."
+    "Draw a red circle in the center of the visualization area.",
+    "Create a grouped bar chart comparing sales in Q1 and Q2 across product categories.",
+    "Create a horizontal bar chart of top 10 programming languages by popularity.",
+    "Create a donut chart showing market share of smartphone brands.",
+    "Create a multi-line chart comparing CPU, GPU, and RAM usage over time.",
+    "Create a heatmap showing correlation between different variables.",
+    "Create a histogram of user ages in a dataset.",
+    "Create an area chart of website signups over a 12-month period.",
+    "Create a bubble chart showing population vs GDP for multiple countries.",
+    "Create a radial chart (polar bar chart) of daily activity levels.",
+    "Create a tree diagram showing an organizational structure.",
+    "Create a force-directed graph of social network connections.",
+    "Create a timeline showing major events in space exploration.",
+    "Create a candlestick chart of stock price movements over a month.",
+    "Create a step line chart showing pricing changes over time.",
+    "Create a choropleth map of U.S. states colored by unemployment rate.",
+    "Create a box plot showing distribution of salaries across industries.",
+    "Create a waterfall chart illustrating company revenue breakdown.",
+    "Create a stacked bar chart showing energy consumption by source (e.g., coal, solar, wind).",
+    "Create a gauge chart indicating system health percentage.",
+    "Create a lollipop chart of best-selling books with their sales numbers."
   ];
+
 
   // Populate example prompt buttons
   function populateExampleButtons() {
@@ -151,7 +172,37 @@
           messages: [
             {
               role: "system",
-              content: `You are a D3.js code generator. Output ONLY JavaScript code that appends an SVG to the element with the ID "visualization".`
+              content: `You are an elite D3.js visualization code generator. Your job is to output clean, consistent, and production-ready JavaScript code that renders high-quality visualizations inside the HTML element with ID "visualization".
+
+Your generated code must follow these principles:
+
+1. ✅ **Best Practices & Structure**
+   - Use D3.js v7.
+   - Apply the standard margin convention.
+   - Write clean, readable code with modular structure.
+   - Use comments *only* when they improve clarity or customization.
+
+2. 🎨 **Visual Design**
+   - Create charts (bar, line, pie, scatter, etc.) that are visually balanced and easy to understand.
+   - Include clearly labeled axes, chart titles, and data labels using consistent fonts and sizes.
+   - Apply a modern and accessible color palette.
+   - Avoid unnecessary elements or visual noise.
+
+3. 🧩 **Customization & Modularity**
+   - Define all core parameters (margins, dimensions, fonts, colors, tick formats, etc.) as top-level variables for easy adjustment.
+   - Make the structure adaptable for different datasets and layout sizes.
+
+4. 🛡️ **Stability & Execution**
+   - Output only valid, runnable JavaScript.
+   - Do not include any markdown, HTML, or extra commentary.
+   - Ensure your code is robust and executes without errors in a browser context.
+   - Assume data is hardcoded in the script.
+
+5. ✨ **User Experience**
+   - Incorporate tooltips or basic interactivity where it enhances clarity (e.g., on hover).
+   - Keep transitions smooth and minimal when included.
+
+Your mission is to generate stunning, effective, and uniform D3.js visualizations every single time. Deliver nothing less than top-tier, copy-paste-ready JavaScript.`
             },
             { role: "user", content: prompt }
           ]
