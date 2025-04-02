@@ -13,6 +13,8 @@
 
   <!-- Monaco Editor via CDN (using require.js) -->
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs/loader.js"></script>
+
+  <!-- dom-to-image for export as PNG/SVG -->
   <script src="https://cdn.jsdelivr.net/npm/dom-to-image@2.6.0/src/dom-to-image.min.js"></script>
 
   <style>
@@ -44,39 +46,54 @@
     <div id="exampleButtons" class="flex flex-wrap gap-2"></div>
   </section>
 
-  <!-- Prompt Input -->
+  <!-- Prompt Input with Undo/Redo -->
   <section class="space-y-4">
     <label for="promptInput" class="block text-lg">Prompt:</label>
     <input id="promptInput" type="text" placeholder="e.g., Create a bar chart of website traffic"
            class="w-full px-4 py-2 bg-zinc-900 text-white border border-zinc-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    <div class="flex gap-2">
+      <button id="undoPrompt" class="text-sm bg-zinc-800 text-white px-3 py-1 rounded-md">⏪ Undo</button>
+      <button id="redoPrompt" class="text-sm bg-zinc-800 text-white px-3 py-1 rounded-md">⏩ Redo</button>
+    </div>
     <button id="generateButton"
             class="w-max bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-md transition-all duration-200">
       Generate Visualization
     </button>
   </section>
 
-  <!-- Code Editor (Monaco) -->
-  <section>
-    <h2 class="text-xl font-semibold mb-2">📝 Code Editor</h2>
-    <div id="editorContainer"></div>
-  </section>
+  <!-- Split Layout: Editor and Visualization -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Code Editor (Monaco) -->
+    <section>
+      <h2 class="text-xl font-semibold mb-2">📝 Code Editor</h2>
+      <div id="editorContainer"></div>
+    </section>
 
-  <!-- Visualization Output -->
-  <section>
-    <h2 class="text-xl font-semibold mb-2">📊 Live Visualization</h2>
-    <div id="visualization" class="border border-zinc-700 rounded-md bg-zinc-900 p-2"></div>
+    <!-- Visualization Output -->
+    <section>
+      <h2 class="text-xl font-semibold mb-2">📊 Live Visualization</h2>
+      <div id="visualization" class="border border-zinc-700 rounded-md bg-zinc-900 p-2 relative"></div>
 
-    <!-- Centered Save Button -->
-    <div class="flex justify-center mt-4">
-      <button id="saveChartBtn"
-              class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-md transition-all duration-200">
-        📥 Save Chart as PNG
-      </button>
-    </div>
-  </section>
+      <!-- Whisper-Style Console -->
+      <div id="console" class="mt-4 text-sm text-zinc-400 font-mono"></div>
+
+      <!-- Export Buttons -->
+      <div class="flex justify-center mt-4 gap-2">
+        <button id="saveChartBtn" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-md">
+          📥 Save PNG
+        </button>
+        <button id="saveChartSvgBtn" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-md">
+          🖼️ Save SVG
+        </button>
+      </div>
+    </section>
+  </div>
+</div>
 
 <script>
   let editor, renderTimeout;
+  let promptHistory = [];
+  let promptIndex = -1;
 
   // Example prompts data
   const examplePrompts = [
@@ -107,21 +124,6 @@
     "Create a lollipop chart of best-selling books with their sales numbers."
   ];
 
-  document.getElementById("saveChartBtn").addEventListener("click", () => {
-    const viz = document.getElementById("visualization");
-    domtoimage.toPng(viz)
-      .then(dataUrl => {
-        const link = document.createElement("a");
-        link.download = "d3-chart.png";
-        link.href = dataUrl;
-        link.click();
-      })
-      .catch(error => {
-        console.error("Error saving chart as image:", error);
-      });
-  });
-
-
   // Populate example prompt buttons
   function populateExampleButtons() {
     const container = document.getElementById('exampleButtons');
@@ -135,6 +137,28 @@
   }
   populateExampleButtons();
 
+  // Save prompt to history
+  function savePrompt(prompt) {
+    promptHistory = promptHistory.slice(0, promptIndex + 1); // clear redo history
+    promptHistory.push(prompt);
+    promptIndex++;
+  }
+
+  // Undo / Redo handlers
+  document.getElementById("undoPrompt").onclick = () => {
+    if (promptIndex > 0) {
+      promptIndex--;
+      document.getElementById("promptInput").value = promptHistory[promptIndex];
+    }
+  };
+
+  document.getElementById("redoPrompt").onclick = () => {
+    if (promptIndex < promptHistory.length - 1) {
+      promptIndex++;
+      document.getElementById("promptInput").value = promptHistory[promptIndex];
+    }
+  };
+
   // Configure Monaco Editor
   require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs' } });
   require(['vs/editor/editor.main'], () => {
@@ -147,7 +171,7 @@
       minimap: { enabled: false }
     });
 
-    // When code changes, re-render the visualization (debounced to avoid rapid calls)
+    // Re-render visualization when code changes (debounced)
     editor.onDidChangeModelContent(() => {
       clearTimeout(renderTimeout);
       renderTimeout = setTimeout(renderVisualization, 500);
@@ -158,23 +182,88 @@
   function renderVisualization() {
     const code = editor.getValue();
     const viz = document.getElementById('visualization');
-    // Clear any previous visualization
+    const consoleEl = document.getElementById('console');
+    const startTime = performance.now();
+
+    // Clear previous visualization and logs
     viz.innerHTML = "";
     d3.select("#visualization").select("svg").remove();
+
     try {
+      // Execute the user-generated D3 code
       new Function(code)();
+      const endTime = performance.now();
+
+      // Basic chart type detection
+      const codeLower = code.toLowerCase();
+      let chartType = "Unknown";
+      if (codeLower.includes("pie")) chartType = "Pie";
+      else if (codeLower.includes("bar")) chartType = "Bar";
+      else if (codeLower.includes("line")) chartType = "Line";
+      else if (codeLower.includes("scatter")) chartType = "Scatter";
+
+      const timeTaken = (endTime - startTime).toFixed(2);
+      let message = `✅ Rendered successfully in <strong>${timeTaken}ms</strong> — Detected chart: <strong>${chartType}</strong>`;
+
+      // Display render info in console area
+      consoleEl.innerHTML = message;
+
+      // Attach live inspector to all SVG elements
+      d3.select("#visualization svg")
+        .selectAll("*")
+        .on("mouseover", function(event, d) {
+          const tag = this.tagName;
+          const dataVal = d && typeof d === "object" ? JSON.stringify(d) : d;
+          const info = `🕵️ Hovering: <strong>${tag}</strong>${dataVal ? ` — Data: ${dataVal}` : ""}`;
+          consoleEl.innerHTML = info;
+        })
+        .on("mouseout", () => {
+          consoleEl.innerHTML = message;
+        });
+
     } catch (err) {
       console.error("Rendering error:", err);
-      viz.innerHTML = `<p class="text-red-400">Error: ${err.message}</p>`;
+      consoleEl.innerHTML = `<span class="text-red-400">❌ Error: ${err.message}</span>`;
     }
   }
+
+  // Save as PNG
+  document.getElementById("saveChartBtn").addEventListener("click", () => {
+    const viz = document.getElementById("visualization");
+    domtoimage.toPng(viz)
+      .then(dataUrl => {
+        const link = document.createElement("a");
+        link.download = "d3-chart.png";
+        link.href = dataUrl;
+        link.click();
+      })
+      .catch(error => {
+        console.error("Error saving chart as PNG:", error);
+      });
+  });
+
+  // Save as SVG
+  document.getElementById("saveChartSvgBtn").addEventListener("click", () => {
+    const viz = document.getElementById("visualization");
+    domtoimage.toSvg(viz)
+      .then(dataUrl => {
+        const link = document.createElement("a");
+        link.download = "d3-chart.svg";
+        link.href = dataUrl;
+        link.click();
+      })
+      .catch(error => console.error("Error saving SVG:", error));
+  });
 
   // Prompt generation handler
   document.getElementById('generateButton').addEventListener('click', async () => {
     const prompt = document.getElementById('promptInput').value.trim();
     if (!prompt) return alert("Enter a prompt.");
 
-    // Clear visualization and show a loading message in the editor.
+    // Save prompt to history
+    savePrompt(prompt);
+
+    // Clear previous visualization and set loading message
     d3.select("#visualization").select("svg").remove();
     document.getElementById('visualization').innerHTML = "";
     editor.setValue("// Generating code...");
@@ -198,31 +287,33 @@
 
 Your generated code must follow these principles:
 
-1. ✅ **Best Practices & Structure**
+1. ✅ Best Practices & Structure
    - Use D3.js v7.
    - Apply the standard margin convention.
-   - Write clean, readable code with modular structure.
-   - Use comments *only* when they improve clarity or customization.
+   - Write clean, readable code with a modular structure.
+   - Use comments only when they improve clarity or customization.
 
-2. 🎨 **Visual Design**
+2. 🎨 Visual Design
    - Create charts (bar, line, pie, scatter, etc.) that are visually balanced and easy to understand.
    - Include clearly labeled axes, chart titles, and data labels using consistent fonts and sizes.
    - Apply a modern and accessible color palette.
    - Avoid unnecessary elements or visual noise.
 
-3. 🧩 **Customization & Modularity**
+3. 🧩 Customization & Modularity
    - Define all core parameters (margins, dimensions, fonts, colors, tick formats, etc.) as top-level variables for easy adjustment.
-   - Make the structure adaptable for different datasets and layout sizes.
+   - Ensure the structure is adaptable for different datasets and layout sizes.
 
-4. 🛡️ **Stability & Execution**
+4. 🛡️ Stability & Execution
    - Output only valid, runnable JavaScript.
    - Do not include any markdown, HTML, or extra commentary.
    - Ensure your code is robust and executes without errors in a browser context.
    - Assume data is hardcoded in the script.
 
-5. ✨ **User Experience**
+5. ✨ User Experience
    - Incorporate tooltips or basic interactivity where it enhances clarity (e.g., on hover).
    - Keep transitions smooth and minimal when included.
+
+IMPORTANT: This model (deepseek-r1-distill-llama-70b) generates its chain-of-thought before the final response, enclosed in <think> tags. INCLUDE that chain-of-thought in your response so the user can see your reasoning, followed by the final JavaScript code output.
 
 Your mission is to generate stunning, effective, and uniform D3.js visualizations every single time. Deliver nothing less than top-tier, copy-paste-ready JavaScript.`
             },
@@ -233,14 +324,32 @@ Your mission is to generate stunning, effective, and uniform D3.js visualization
 
       const data = await response.json();
       console.log("API response:", data);
-      const output = data.choices[0].message.content;
-      // Extract code from Markdown-style formatting if present
+      let output = data.choices[0].message.content;
+
+      // Extract chain-of-thought if present
+      let chainOfThought = "";
+      if (output.includes("<think>")) {
+        const thinkMatch = output.match(/<think>([\s\S]*?)<\/think>/i);
+        if (thinkMatch) {
+          chainOfThought = thinkMatch[1].trim();
+        }
+        // Remove chain-of-thought from output
+        output = output.replace(/<think>[\s\S]*?<\/think>/i, "").trim();
+      }
+
+      // Extract code from Markdown formatting if present
       const codeMatch = output.match(/```javascript\s*([\s\S]*?)```/i);
       const extractedCode = codeMatch ? codeMatch[1].trim() : output.trim();
 
       // Set the generated code in the Monaco Editor
       editor.setValue(extractedCode);
       renderVisualization();
+
+      // Append chain-of-thought to the console (if available)
+      if (chainOfThought) {
+        const consoleEl = document.getElementById('console');
+        consoleEl.innerHTML += `<br/><span class="text-blue-400">Chain-of-Thought: ${chainOfThought}</span>`;
+      }
 
     } catch (error) {
       console.error("Error fetching code:", error);
