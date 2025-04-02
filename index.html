@@ -13,6 +13,7 @@
 
   <!-- Monaco Editor via CDN (using require.js) -->
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs/loader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dom-to-image@2.6.0/src/dom-to-image.min.js"></script>
 
   <style>
     body {
@@ -64,8 +65,15 @@
   <section>
     <h2 class="text-xl font-semibold mb-2">📊 Live Visualization</h2>
     <div id="visualization" class="border border-zinc-700 rounded-md bg-zinc-900 p-2"></div>
+
+    <!-- Centered Save Button -->
+    <div class="flex justify-center mt-4">
+      <button id="saveChartBtn"
+              class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-md transition-all duration-200">
+        📥 Save Chart as PNG
+      </button>
+    </div>
   </section>
-</div>
 
 <script>
   let editor, renderTimeout;
@@ -98,6 +106,20 @@
     "Create a gauge chart indicating system health percentage.",
     "Create a lollipop chart of best-selling books with their sales numbers."
   ];
+
+  document.getElementById("saveChartBtn").addEventListener("click", () => {
+    const viz = document.getElementById("visualization");
+    domtoimage.toPng(viz)
+      .then(dataUrl => {
+        const link = document.createElement("a");
+        link.download = "d3-chart.png";
+        link.href = dataUrl;
+        link.click();
+      })
+      .catch(error => {
+        console.error("Error saving chart as image:", error);
+      });
+  });
 
 
   // Populate example prompt buttons
